@@ -1,6 +1,7 @@
 import "dotenv/config";
 
 import { fastify, type FastifyReply, type FastifyRequest } from "fastify";
+import { analyticsRoutes } from "./routes/analytics-routes";
 import { authRoutes } from "./routes/auth-routes";
 import { clientRoutes } from "./routes/client-routes";
 
@@ -12,6 +13,7 @@ server.get("/", async (_request: FastifyRequest, reply: FastifyReply) => {
 
 server.register(authRoutes, { prefix: "/auth" });
 server.register(clientRoutes, { prefix: "/clients" });
+server.register(analyticsRoutes, { prefix: "/analytics" });
 
 const start = async () => {
   try {
