@@ -14,15 +14,24 @@ export async function authMiddleware(
   request: FastifyRequest,
   _reply: FastifyReply,
 ) {
-  const authHeader = request.headers.authorization;
+  const authorization = request.headers.authorization;
+  let authHeader = "";
+
+  if (typeof authorization === "string") {
+    authHeader = authorization.trim();
+  } else if (Array.isArray(authorization)) {
+    const authorizationArray = authorization as string[];
+    authHeader = authorizationArray.join(" ").trim();
+  }
 
   if (!authHeader) {
     throw new AppError("Missing authorization header", 401);
   }
 
-  const [scheme, token] = authHeader.split(" ");
+  const [scheme, ...tokenParts] = authHeader.split(/\s+/);
+  const token = tokenParts.join(" ").trim();
 
-  if (scheme !== "Bearer" || !token) {
+  if (!scheme || scheme.toLowerCase() !== "bearer" || !token) {
     throw new AppError("Invalid authorization scheme", 401);
   }
 

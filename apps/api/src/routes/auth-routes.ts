@@ -4,15 +4,12 @@ import { loginSchema, registerSchema } from "@nexusflow/schemas";
 
 import { registerUserService } from "../services/auth/register-user-service";
 import { loginUserService } from "../services/auth/login-user-service";
+import { getUserByIdService } from "../services/auth/get-user-by-id-service";
 import { authMiddleware } from "../middlewares/auth-middleware";
 import { AppError } from "../utils/app-error";
 import { logger } from "../utils/logger";
 
-import {
-  bearerAuth,
-  registerBody,
-  loginBody,
-} from "../docs/schema-builders";
+import { bearerAuth, registerBody, loginBody } from "../docs/schema-builders";
 
 export async function authRoutes(server: FastifyInstance) {
   server.post(
@@ -106,7 +103,8 @@ export async function authRoutes(server: FastifyInstance) {
       preHandler: authMiddleware,
     },
     async (request, reply) => {
-      return reply.send({ user: request.user });
+      const user = await getUserByIdService(request.user.sub);
+      return reply.send({ user });
     },
   );
 
