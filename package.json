@@ -1,0 +1,19 @@
+{
+  "name": "nexusflow",
+  "version": "1.0.0",
+  "description": "",
+  "private": true,
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "type-check": "turbo type-check"
+  },
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.33.0",
+  "dependencies": {
+    "turbo": "^2.9.12",
+    "zod": "^4.4.3"
+  }
+}
