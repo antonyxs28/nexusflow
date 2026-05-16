@@ -1,14 +1,22 @@
 {
   "name": "@nexusflow/types",
   "version": "1.0.0",
+  "description": "NexusFlow shared TypeScript types",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src/",
+    "format": "prettier --write src/",
+    "format:check": "prettier --check src/",
+    "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
     "@nexusflow/schemas": "workspace:*",
     "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
   }
 }
