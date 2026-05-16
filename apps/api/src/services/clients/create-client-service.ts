@@ -9,21 +9,16 @@ export async function createClientService(
   input: CreateClientInput & { ownerId: string },
 ): Promise<Client> {
   const { ownerId, ...data } = input;
-  const { name, email, company, status, plan, mrr } =
-    createClientSchema.parse(data);
+  const values = createClientSchema.parse(data);
 
   const [client] = await db
     .insert(clients)
-    .values({
-      name,
-      email,
-      company,
-      status,
-      plan,
-      mrr,
-      ownerId,
-    })
+    .values({ ...values, ownerId })
     .returning();
+
+  if (!client) {
+    throw new AppError("Failed to create client", 500);
+  }
 
   return client;
 }

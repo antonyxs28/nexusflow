@@ -29,5 +29,9 @@ export async function updateClientService(
     .where(and(eq(clients.id, id), eq(clients.ownerId, ownerId)))
     .returning();
 
+  if (!client) {
+    throw new AppError("Client not found", 404);
+  }
+
   return client;
 }

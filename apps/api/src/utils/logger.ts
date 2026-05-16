@@ -10,7 +10,6 @@ const green = chalk.hex("#22c55e");
 const amber = chalk.hex("#f59e0b");
 const red = chalk.hex("#ef4444");
 const blue = chalk.hex("#3b82f6");
-const purple = chalk.hex("#a855f7");
 const gray = chalk.hex("#6b7280");
 const dim = chalk.dim;
 
