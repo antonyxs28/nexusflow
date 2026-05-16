@@ -1,4 +1,4 @@
-import { jsonb, pgTable, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
+import { index, jsonb, pgTable, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
 import { uuidv7 } from "uuidv7";
 import { clients } from "./clients";
 import { users } from "./users";
@@ -21,4 +21,6 @@ export const analyticsEvents = pgTable("analytics_events", {
     .references(() => users.id, { onDelete: "cascade" }),
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("idx_analytics_events_owner").on(table.ownerId),
+]);

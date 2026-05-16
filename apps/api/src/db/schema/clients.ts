@@ -1,4 +1,4 @@
-import { numeric, pgTable, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
+import { index, numeric, pgTable, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
 import { uuidv7 } from "uuidv7";
 import { users } from "./users";
 
@@ -24,4 +24,6 @@ export const clients = pgTable("clients", {
     .references(() => users.id, { onDelete: "cascade" }),
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("idx_clients_owner_id").on(table.ownerId),
+]);
