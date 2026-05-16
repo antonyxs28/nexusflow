@@ -1,7 +1,6 @@
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 
-import { registerSchema } from "@nexusflow/schemas";
 import type { SafeUser } from "@nexusflow/types";
 
 import { db } from "../../db";
@@ -17,33 +16,36 @@ interface RegisterUserServiceInput {
 export async function registerUserService(
   input: RegisterUserServiceInput,
 ): Promise<SafeUser> {
-  const { name, email, password } = registerSchema.parse(input);
+  const { name, email, password } = input;
+  const normalizedEmail = email.toLowerCase().trim();
 
   const [existingUser] = await db
     .select()
     .from(users)
-    .where(eq(users.email, email));
+    .where(eq(users.email, normalizedEmail));
 
   if (existingUser) {
     throw new AppError("User with this email already exists", 409);
   }
 
-  const hashedPassword = await bcrypt.hash(password, 8);
+  const hashedPassword = await bcrypt.hash(password, 12);
 
   const [user] = await db
     .insert(users)
     .values({
       name,
-      email,
+      email: normalizedEmail,
       password: hashedPassword,
     })
     .returning();
 
+  const createdUser = user!;
+
   return {
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    role: user.role,
-    createdAt: user.createdAt,
+    id: createdUser.id,
+    name: createdUser.name,
+    email: createdUser.email,
+    role: createdUser.role,
+    createdAt: createdUser.createdAt,
   };
 }

@@ -5,10 +5,8 @@ import { getDashboardOverviewService } from "../services/analytics/get-dashboard
 import { getRevenueAnalyticsService } from "../services/analytics/get-revenue-analytics-service";
 import { getTrafficAnalyticsService } from "../services/analytics/get-traffic-analytics-service";
 import { getRecentActivityService } from "../services/analytics/get-recent-activity-service";
-import { AppError } from "../utils/app-error";
 
 import { bearerAuth } from "../docs/schema-builders";
-import { logger } from "../utils/logger";
 
 export async function analyticsRoutes(server: FastifyInstance) {
   server.addHook("preHandler", authMiddleware);
@@ -125,24 +123,4 @@ export async function analyticsRoutes(server: FastifyInstance) {
     },
   );
 
-  server.setErrorHandler(async (error, _request, reply) => {
-    if (error instanceof AppError) {
-      return reply.status(error.statusCode).send({
-        message: error.message,
-      });
-    }
-
-    const zodError = error as any;
-    if (zodError.name === "ZodError") {
-      return reply.status(400).send({
-        message: "Validation error",
-        errors: zodError.issues ?? zodError.errors,
-      });
-    }
-
-    logger.error(error);
-    return reply.status(500).send({
-      message: "Internal server error",
-    });
-  });
 }

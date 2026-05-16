@@ -19,13 +19,6 @@ export interface SafeUser {
   createdAt: Date;
 }
 
-export interface JwtPayload {
-  sub: string;
-  email: string;
-  name: string;
-  role: string | null;
-}
-
 export interface AuthResponse {
   token: string;
   user: SafeUser;

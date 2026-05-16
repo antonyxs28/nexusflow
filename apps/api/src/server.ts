@@ -1,10 +1,15 @@
 import "dotenv/config";
 
 import { fastify } from "fastify";
+import { corsPlugin } from "./plugins/cors";
 import { docsPlugin } from "./plugins/docs";
+import { registerRateLimiter } from "./plugins/rate-limiter";
 import { analyticsRoutes } from "./routes/analytics-routes";
 import { authRoutes } from "./routes/auth-routes";
 import { clientRoutes } from "./routes/client-routes";
+import { errorHandler } from "./errors";
+import { env } from "./env";
+import { validateJwtSecret } from "./utils/jwt";
 import {
   logger,
   printStartupBanner,
@@ -16,11 +21,12 @@ import type { EndpointGroup } from "./utils/logger";
 
 export const server = fastify({
   logger: false,
+  trustProxy: true,
 });
 
-const PORT = Number(process.env.PORT) || 3001;
-const HOST = process.env.HOST || "0.0.0.0";
-const ENV = process.env.NODE_ENV || "development";
+const PORT = env.PORT;
+const HOST = env.HOST;
+const ENV = env.NODE_ENV;
 
 server.addHook("onResponse", async (request, reply) => {
   if (request.url.startsWith("/reference")) return;
@@ -32,7 +38,10 @@ server.addHook("onResponse", async (request, reply) => {
   );
 });
 
+server.register(corsPlugin);
 server.register(docsPlugin);
+
+server.setErrorHandler(errorHandler);
 
 server.get(
   "/",
@@ -98,6 +107,13 @@ const groups: EndpointGroup[] = [
 
 const start = async () => {
   try {
+    validateJwtSecret(env.JWT_SECRET);
+
+    await registerRateLimiter(server, {
+      max: env.RATE_LIMIT_MAX,
+      timeWindow: env.RATE_LIMIT_TIME_WINDOW,
+    });
+
     await server.ready();
 
     printStartupBanner({

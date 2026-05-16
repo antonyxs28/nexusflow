@@ -1,10 +1,9 @@
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 import { eq } from "drizzle-orm";
 
-import { loginSchema } from "@nexusflow/schemas";
-import type { AuthResponse, JwtPayload, SafeUser } from "@nexusflow/types";
+import type { AuthResponse, SafeUser } from "@nexusflow/types";
 
+import { signAccessToken } from "../../utils/jwt";
 import { db } from "../../db";
 import { users } from "../../db/schema/users";
 import { AppError } from "../../utils/app-error";
@@ -17,9 +16,13 @@ interface LoginUserServiceInput {
 export async function loginUserService(
   input: LoginUserServiceInput,
 ): Promise<AuthResponse> {
-  const { email, password } = loginSchema.parse(input);
+  const { email, password } = input;
+  const normalizedEmail = email.toLowerCase().trim();
 
-  const [user] = await db.select().from(users).where(eq(users.email, email));
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, normalizedEmail));
 
   if (!user) {
     throw new AppError("Invalid email or password", 401);
@@ -31,22 +34,7 @@ export async function loginUserService(
     throw new AppError("Invalid email or password", 401);
   }
 
-  const jwtSecret = process.env.JWT_SECRET;
-
-  if (!jwtSecret) {
-    throw new AppError("JWT_SECRET is not configured", 500);
-  }
-
-  const payload: JwtPayload = {
-    sub: user.id,
-    email: user.email,
-    name: user.name,
-    role: user.role,
-  };
-
-  const token = jwt.sign(payload, jwtSecret, {
-    expiresIn: "7d",
-  });
+  const accessToken = signAccessToken(user.id, user.role ?? "");
 
   const safeUser: SafeUser = {
     id: user.id,
@@ -57,7 +45,7 @@ export async function loginUserService(
   };
 
   return {
-    token,
+    token: accessToken,
     user: safeUser,
   };
 }

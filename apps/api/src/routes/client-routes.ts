@@ -8,8 +8,6 @@ import { getClientsService } from "../services/clients/get-clients-service";
 import { getClientByIdService } from "../services/clients/get-client-by-id-service";
 import { updateClientService } from "../services/clients/update-client-service";
 import { deleteClientService } from "../services/clients/delete-client-service";
-import { AppError } from "../utils/app-error";
-import { logger } from "../utils/logger";
 
 import {
   bearerAuth,
@@ -198,24 +196,4 @@ export async function clientRoutes(server: FastifyInstance) {
     },
   );
 
-  server.setErrorHandler(async (error, _request, reply) => {
-    if (error instanceof AppError) {
-      return reply.status(error.statusCode).send({
-        message: error.message,
-      });
-    }
-
-    const zodError = error as any;
-    if (zodError.name === "ZodError") {
-      return reply.status(400).send({
-        message: "Validation error",
-        errors: zodError.issues ?? zodError.errors,
-      });
-    }
-
-    logger.error(error);
-    return reply.status(500).send({
-      message: "Internal server error",
-    });
-  });
 }

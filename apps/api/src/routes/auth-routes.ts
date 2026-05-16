@@ -6,12 +6,17 @@ import { registerUserService } from "../services/auth/register-user-service";
 import { loginUserService } from "../services/auth/login-user-service";
 import { getUserByIdService } from "../services/auth/get-user-by-id-service";
 import { authMiddleware } from "../middlewares/auth-middleware";
-import { AppError } from "../utils/app-error";
-import { logger } from "../utils/logger";
+import { registerRateLimiter } from "../plugins/rate-limiter";
+import { env } from "../env";
 
 import { bearerAuth, registerBody, loginBody } from "../docs/schema-builders";
 
 export async function authRoutes(server: FastifyInstance) {
+  await registerRateLimiter(server, {
+    max: env.RATE_LIMIT_AUTH_MAX,
+    timeWindow: env.RATE_LIMIT_AUTH_TIME_WINDOW,
+  });
+
   server.post(
     "/register",
     {
@@ -39,9 +44,7 @@ export async function authRoutes(server: FastifyInstance) {
     },
     async (request, reply) => {
       const body = registerSchema.parse(request.body);
-
       const user = await registerUserService(body);
-
       return reply.status(201).send({ user });
     },
   );
@@ -73,9 +76,7 @@ export async function authRoutes(server: FastifyInstance) {
     },
     async (request, reply) => {
       const body = loginSchema.parse(request.body);
-
       const result = await loginUserService(body);
-
       return reply.status(200).send(result);
     },
   );
@@ -107,25 +108,4 @@ export async function authRoutes(server: FastifyInstance) {
       return reply.send({ user });
     },
   );
-
-  server.setErrorHandler(async (error, _request, reply) => {
-    if (error instanceof AppError) {
-      return reply.status(error.statusCode).send({
-        message: error.message,
-      });
-    }
-
-    const zodError = error as any;
-    if (zodError.name === "ZodError") {
-      return reply.status(400).send({
-        message: "Validation error",
-        errors: zodError.issues ?? zodError.errors,
-      });
-    }
-
-    logger.error(error);
-    return reply.status(500).send({
-      message: "Internal server error",
-    });
-  });
 }

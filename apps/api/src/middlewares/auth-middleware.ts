@@ -1,7 +1,7 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
-import jwt from "jsonwebtoken";
 
-import type { JwtPayload } from "@nexusflow/types";
+import type { JwtPayload } from "../types/auth";
+import { verifyAccessToken } from "../utils/jwt";
 import { AppError } from "../utils/app-error";
 
 declare module "fastify" {
@@ -14,37 +14,35 @@ export async function authMiddleware(
   request: FastifyRequest,
   _reply: FastifyReply,
 ) {
-  const authorization = request.headers.authorization;
-  let authHeader = "";
-
-  if (typeof authorization === "string") {
-    authHeader = authorization.trim();
-  } else if (Array.isArray(authorization)) {
-    const authorizationArray = authorization as string[];
-    authHeader = authorizationArray.join(" ").trim();
-  }
+  const authHeader = request.headers.authorization;
 
   if (!authHeader) {
-    throw new AppError("Missing authorization header", 401);
+    throw new AppError("Missing Authorization header", 401);
   }
 
-  const [scheme, ...tokenParts] = authHeader.split(/\s+/);
-  const token = tokenParts.join(" ").trim();
+  const headerValue = Array.isArray(authHeader) ? authHeader[0] : authHeader;
 
-  if (!scheme || scheme.toLowerCase() !== "bearer" || !token) {
-    throw new AppError("Invalid authorization scheme", 401);
+  if (!headerValue) {
+    throw new AppError("Missing Authorization header", 401);
   }
 
-  const jwtSecret = process.env.JWT_SECRET;
+  const parts = headerValue.split(" ");
 
-  if (!jwtSecret) {
-    throw new AppError("JWT_SECRET is not configured", 500);
+  if (parts.length !== 2) {
+    throw new AppError(
+      "Invalid Authorization format. Expected: Bearer <token>",
+      401,
+    );
   }
 
-  try {
-    const decoded = jwt.verify(token, jwtSecret) as JwtPayload;
-    request.user = decoded;
-  } catch {
-    throw new AppError("Invalid or expired token", 401);
+  const [scheme, token] = parts;
+
+  if (scheme?.toLowerCase() !== "bearer" || !token) {
+    throw new AppError(
+      "Invalid Authorization format. Expected: Bearer <token>",
+      401,
+    );
   }
+
+  request.user = verifyAccessToken(token);
 }
