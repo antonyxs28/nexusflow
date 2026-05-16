@@ -1,12 +1,11 @@
-import { and, count, eq, gte, lt, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 
 import { db } from "../../db";
-import { invoices } from "../../db/schema/invoices";
-import { subscriptions } from "../../db/schema/subscriptions";
 import {
   calculateAverageRevenuePerUser,
   calculateChurnRate,
   calculateGrowth,
+  computePeriodDates,
 } from "../../utils/analytics/calculations";
 
 export interface DashboardOverview {
@@ -20,134 +19,78 @@ export interface DashboardOverview {
   mrr: number;
 }
 
+interface DashboardQueryResult {
+  current_revenue: string;
+  previous_revenue: string;
+  current_active: number;
+  previous_active: number;
+  total_subscriptions: number;
+  total_canceled: number;
+  previous_total_subscriptions: number;
+  previous_canceled: number;
+  mrr: string;
+}
+
 export async function getDashboardOverviewService(
   ownerId: string,
 ): Promise<DashboardOverview> {
-  const now = new Date();
-  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const lastMonthStart = new Date(
-    now.getFullYear(),
-    now.getMonth() - 1,
-    1,
-  );
+  const { currentMonthStart, lastMonthStart } = computePeriodDates();
 
-  const [currentRevenue] = await db
-    .select({
-      total: sql<number>`COALESCE(SUM(${invoices.amount}), 0)`,
-    })
-    .from(invoices)
-    .where(
-      and(
-        eq(invoices.ownerId, ownerId),
-        eq(invoices.status, "paid"),
-        gte(invoices.createdAt, currentMonthStart),
-      ),
-    );
+  const result = await db.execute(sql`
+    WITH
+    revenue_agg AS (
+      SELECT
+        COALESCE(SUM(amount) FILTER (WHERE created_at >= ${currentMonthStart}), 0) AS current_revenue,
+        COALESCE(SUM(amount) FILTER (WHERE created_at >= ${lastMonthStart} AND created_at < ${currentMonthStart}), 0) AS previous_revenue
+      FROM invoices
+      WHERE owner_id = ${ownerId} AND status = 'paid'
+    ),
+    subscription_agg AS (
+      SELECT
+        COUNT(*) FILTER (WHERE status = 'active' AND created_at >= ${currentMonthStart}) AS current_active,
+        COUNT(*) FILTER (WHERE status = 'active' AND created_at >= ${lastMonthStart} AND created_at < ${currentMonthStart}) AS previous_active,
+        COUNT(*) AS total_subscriptions,
+        COUNT(*) FILTER (WHERE status = 'canceled') AS total_canceled,
+        COUNT(*) FILTER (WHERE status = 'canceled' AND created_at >= ${lastMonthStart} AND created_at < ${currentMonthStart}) AS previous_canceled,
+        COUNT(*) FILTER (WHERE created_at >= ${lastMonthStart} AND created_at < ${currentMonthStart}) AS previous_total_subscriptions,
+        COALESCE(SUM(mrr) FILTER (WHERE status = 'active'), 0) AS mrr
+      FROM subscriptions
+      WHERE owner_id = ${ownerId}
+    )
+    SELECT * FROM revenue_agg, subscription_agg
+  `);
 
-  const [previousRevenue] = await db
-    .select({
-      total: sql<number>`COALESCE(SUM(${invoices.amount}), 0)`,
-    })
-    .from(invoices)
-    .where(
-      and(
-        eq(invoices.ownerId, ownerId),
-        eq(invoices.status, "paid"),
-        gte(invoices.createdAt, lastMonthStart),
-        lt(invoices.createdAt, currentMonthStart),
-      ),
-    );
+  const row = result.rows[0] as unknown as DashboardQueryResult | undefined;
 
-  const [currentActive] = await db
-    .select({
-      count: sql<number>`COUNT(*)`,
-    })
-    .from(subscriptions)
-    .where(
-      and(
-        eq(subscriptions.ownerId, ownerId),
-        eq(subscriptions.status, "active"),
-        gte(subscriptions.createdAt, currentMonthStart),
-      ),
-    );
+  if (!row) {
+    return {
+      totalRevenue: 0,
+      totalRevenueGrowth: 0,
+      activeUsers: 0,
+      activeUsersGrowth: 0,
+      churnRate: 0,
+      churnRateGrowth: 0,
+      averageRevenuePerUser: 0,
+      mrr: 0,
+    };
+  }
 
-  const [previousActive] = await db
-    .select({
-      count: sql<number>`COUNT(*)`,
-    })
-    .from(subscriptions)
-    .where(
-      and(
-        eq(subscriptions.ownerId, ownerId),
-        eq(subscriptions.status, "active"),
-        gte(subscriptions.createdAt, lastMonthStart),
-        lt(subscriptions.createdAt, currentMonthStart),
-      ),
-    );
-
-  const [allSubscriptions] = await db
-    .select({
-      total: count(),
-      canceled:
-        sql<number>`COALESCE(COUNT(*) FILTER (WHERE ${subscriptions.status} = 'canceled'), 0)`,
-    })
-    .from(subscriptions)
-    .where(eq(subscriptions.ownerId, ownerId));
-
-  const churnRate = calculateChurnRate(
-    Number(allSubscriptions.canceled),
-    allSubscriptions.total,
-  );
-
-  const [previousSubscriptions] = await db
-    .select({
-      total: count(),
-      canceled:
-        sql<number>`COALESCE(COUNT(*) FILTER (WHERE ${subscriptions.status} = 'canceled'), 0)`,
-    })
-    .from(subscriptions)
-    .where(
-      and(
-        eq(subscriptions.ownerId, ownerId),
-        gte(subscriptions.createdAt, lastMonthStart),
-        lt(subscriptions.createdAt, currentMonthStart),
-      ),
-    );
-
+  const totalRevenueCurrent = Number(row.current_revenue);
+  const totalRevenuePrevious = Number(row.previous_revenue);
+  const activeUsersCurrent = Number(row.current_active);
+  const activeUsersPrevious = Number(row.previous_active);
+  const churnRate = calculateChurnRate(row.total_canceled, row.total_subscriptions);
   const previousChurnRate = calculateChurnRate(
-    Number(previousSubscriptions.canceled),
-    previousSubscriptions.total,
+    row.previous_canceled,
+    row.previous_total_subscriptions,
   );
-
-  const [mrrResult] = await db
-    .select({
-      total: sql<number>`COALESCE(SUM(${subscriptions.mrr}), 0)`,
-    })
-    .from(subscriptions)
-    .where(
-      and(
-        eq(subscriptions.ownerId, ownerId),
-        eq(subscriptions.status, "active"),
-      ),
-    );
-
-  const totalRevenueCurrent = Number(currentRevenue.total);
-  const totalRevenuePrevious = Number(previousRevenue.total);
-  const activeUsersCurrent = Number(currentActive.count);
-  const activeUsersPrevious = Number(previousActive.count);
-  const mrr = Number(mrrResult.total);
+  const mrr = Number(row.mrr);
 
   return {
     totalRevenue: totalRevenueCurrent,
-    totalRevenueGrowth: calculateGrowth(
-      totalRevenueCurrent,
-      totalRevenuePrevious,
-    ),
+    totalRevenueGrowth: calculateGrowth(totalRevenueCurrent, totalRevenuePrevious),
     activeUsers: activeUsersCurrent,
-    activeUsersGrowth: calculateGrowth(
-      activeUsersCurrent,
-      activeUsersPrevious,
-    ),
+    activeUsersGrowth: calculateGrowth(activeUsersCurrent, activeUsersPrevious),
     churnRate,
     churnRateGrowth: calculateGrowth(churnRate, previousChurnRate),
     averageRevenuePerUser: calculateAverageRevenuePerUser(

@@ -1,8 +1,6 @@
-import { and, eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 
 import { db } from "../../db";
-import { invoices } from "../../db/schema/invoices";
-import { subscriptions } from "../../db/schema/subscriptions";
 
 export interface MonthlyRevenue {
   month: string;
@@ -15,43 +13,57 @@ export interface RevenueAnalytics {
   arr: number;
 }
 
+interface RevenueQueryRow {
+  month: string | null;
+  revenue: string;
+  mrr: string;
+}
+
 export async function getRevenueAnalyticsService(
   ownerId: string,
 ): Promise<RevenueAnalytics> {
-  const monthlyRows = await db.execute(sql`
+  const result = await db.execute(sql`
+    WITH
+    monthly_revenue AS (
+      SELECT
+        TO_CHAR(DATE_TRUNC('month', created_at), 'YYYY-MM') AS month,
+        COALESCE(SUM(amount), 0) AS revenue
+      FROM invoices
+      WHERE owner_id = ${ownerId} AND status = 'paid'
+      GROUP BY DATE_TRUNC('month', created_at)
+      ORDER BY month DESC
+      LIMIT 12
+    ),
+    mrr_agg AS (
+      SELECT COALESCE(SUM(mrr), 0) AS mrr
+      FROM subscriptions
+      WHERE owner_id = ${ownerId} AND status = 'active'
+    )
     SELECT
-      TO_CHAR(DATE_TRUNC('month', ${invoices.createdAt}), 'YYYY-MM') AS month,
-      COALESCE(SUM(${invoices.amount}), 0) AS revenue
-    FROM ${invoices}
-    WHERE
-      ${eq(invoices.ownerId, ownerId)} AND
-      ${eq(invoices.status, 'paid')}
-    GROUP BY DATE_TRUNC('month', ${invoices.createdAt})
-    ORDER BY month DESC
-    LIMIT 12
+      month,
+      revenue,
+      (SELECT mrr FROM mrr_agg) AS mrr
+    FROM monthly_revenue
+    UNION ALL
+    SELECT
+      NULL::text AS month,
+      0::numeric AS revenue,
+      mrr
+    FROM mrr_agg
+    WHERE NOT EXISTS (SELECT 1 FROM monthly_revenue)
   `);
 
-  const monthlyRevenue: MonthlyRevenue[] = (monthlyRows as any[]).map(
-    (row: any) => ({
-      month: row.month,
-      revenue: Number(row.revenue),
-    }),
-  );
+  const rows = result.rows as unknown as RevenueQueryRow[];
 
-  const [mrrResult] = await db
-    .select({
-      total: sql<number>`COALESCE(SUM(${subscriptions.mrr}), 0)`,
-    })
-    .from(subscriptions)
-    .where(
-      and(
-        eq(subscriptions.ownerId, ownerId),
-        eq(subscriptions.status, "active"),
-      ),
-    );
-
-  const mrr = Number(mrrResult.total);
+  const mrr = rows.length > 0 ? Number(rows[0]!.mrr) : 0;
   const arr = Number((mrr * 12).toFixed(2));
+
+  const monthlyRevenue: MonthlyRevenue[] = rows
+    .filter((r) => r.month !== null)
+    .map((r) => ({
+      month: r.month!,
+      revenue: Number(r.revenue),
+    }));
 
   return {
     monthlyRevenue,

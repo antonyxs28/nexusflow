@@ -1,3 +1,13 @@
+export function computePeriodDates(now: Date = new Date()): {
+  currentMonthStart: Date;
+  lastMonthStart: Date;
+} {
+  const currentMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const lastMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+
+  return { currentMonthStart, lastMonthStart };
+}
+
 export function calculateGrowth(current: number, previous: number): number {
   if (previous === 0) {
     if (current === 0) return 0;
@@ -6,10 +16,7 @@ export function calculateGrowth(current: number, previous: number): number {
   return Number(((current - previous) / previous * 100).toFixed(1));
 }
 
-export function calculateChurnRate(
-  canceled: number,
-  total: number,
-): number {
+export function calculateChurnRate(canceled: number, total: number): number {
   if (total === 0) return 0;
   return Number(((canceled / total) * 100).toFixed(1));
 }
